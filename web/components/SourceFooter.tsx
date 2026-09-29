@@ -1,6 +1,10 @@
-export function SourceFooter({ sourceName, sourceUrl, lastUpdated }: { sourceName?: string | null; sourceUrl?: string | null; lastUpdated?: string | null }) {
+type Source = { code: string; name: string; url: string | null; lastUpdated: string | null };
+
+export function SourceFooter({ sources }: { sources: Source[] }) {
   return <footer className="footer">
-    <span>Source: {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer">{sourceName ?? "View original data"} ↗</a> : sourceName ?? "Not specified"}</span>
-    <span>{lastUpdated ? ` · Updated ${new Date(lastUpdated).toLocaleDateString()}` : " · Update time not available"}</span>
+    {sources.length ? sources.map((source) => <div key={source.code}>
+      <span>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.name} ↗</a> : source.name}</span>
+      <span>{source.lastUpdated ? ` · Updated ${new Date(`${source.lastUpdated}Z`).toLocaleDateString()}` : " · Update time not available"}</span>
+    </div>) : <span>Sources not specified.</span>}
   </footer>;
 }

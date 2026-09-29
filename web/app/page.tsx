@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-type Indicator = { code: string; name: string; country: string; category: string | null; unit: string | null };
+type Indicator = {
+  code: string;
+  name: string;
+  unit: string | null;
+  category: string | null;
+  countries: string[];
+};
 
 export default async function HomePage() {
   let indicators: Indicator[] = [];
@@ -10,10 +16,23 @@ export default async function HomePage() {
   if (supabase) {
     const { data, error } = await supabase
       .from("indicators")
-      .select("code, name, country, category, unit")
+      .select("code, name, unit, categories(name), series(countries(name))")
       .order("name")
       .limit(12);
-    indicators = data ?? [];
+    indicators = (data ?? []).map((item) => {
+      const category = Array.isArray(item.categories) ? item.categories[0] : item.categories;
+      const countries = item.series.flatMap((seriesItem) => {
+        const country = Array.isArray(seriesItem.countries) ? seriesItem.countries[0] : seriesItem.countries;
+        return country?.name ? [country.name] : [];
+      });
+      return {
+        code: item.code,
+        name: item.name,
+        unit: item.unit,
+        category: category?.name ?? null,
+        countries: [...new Set(countries)],
+      };
+    });
     unavailable = Boolean(error);
   }
 
@@ -35,9 +54,9 @@ export default async function HomePage() {
         <div className="grid">
           {indicators.map((indicator) => (
             <Link className="card" href={`/indicator/${encodeURIComponent(indicator.code)}`} key={indicator.code}>
-              <span className="tag">{indicator.category ?? indicator.country}</span>
+              <span className="tag">{indicator.category ?? "Macro"}</span>
               <h3>{indicator.name}</h3>
-              <span className="muted">{indicator.country}{indicator.unit ? ` · ${indicator.unit}` : ""}</span>
+              <span className="muted">{indicator.countries.join(", ") || "Global"}{indicator.unit ? ` · ${indicator.unit}` : ""}</span>
             </Link>
           ))}
         </div>

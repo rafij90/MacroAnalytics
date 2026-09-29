@@ -1,4 +1,4 @@
-"""Fetch configured indicators and upsert their latest source data."""
+"""Fetch configured source series and upsert their actual observations."""
 
 import logging
 
@@ -9,30 +9,35 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def fetch_for_indicator(indicator: dict) -> list[tuple[str, float]]:
-    source = indicator.get("sources") or {}
-    source_name = (source.get("name") or "").strip().lower()
-    series_id = indicator.get("source_series_id")
+def fetch_for_series(series: dict) -> list[tuple[str, float]]:
+    publisher = series.get("publishers") or {}
+    publisher_code = (series.get("publisher_code") or publisher.get("code") or "").upper()
+    source_series_id = series.get("source_series_id")
 
-    if source_name == "fred":
-        return fred.fetch(series_id)
-    if source_name in {"world bank", "worldbank"}:
-        return worldbank.fetch(indicator["country"], series_id)
-    raise ValueError(f"Unsupported data source: {source.get('name')!r}")
+    if not source_series_id:
+        raise ValueError(f"Series {series.get('code')!r} has no source_series_id")
+    if publisher_code == "FRED":
+        return fred.fetch(source_series_id)
+    if publisher_code in {"WB", "WORLD_BANK", "WORLDBANK"}:
+        return worldbank.fetch(series["country_code"], source_series_id)
+    raise ValueError(f"Unsupported publisher: {publisher_code!r}")
 
 
 def main() -> None:
     client = db.get_client()
-    indicators = db.get_indicators(client)
-    logger.info("Updating %d indicators", len(indicators))
+    series_list = db.get_series(client)
+    logger.info("Updating %d series", len(series_list))
 
     failures = 0
-    for indicator in indicators:
-        code = indicator.get("code", indicator.get("id"))
+    for series in series_list:
+        code = series.get("code")
         try:
-            rows = fetch_for_indicator(indicator)
-            db.upsert_observations(client, indicator["id"], rows)
-            db.mark_updated(client, indicator["id"])
+            if series.get("has_actuals") is False:
+                logger.info("Skipping forecast-only series %s", code)
+                continue
+            rows = fetch_for_series(series)
+            db.upsert_actuals(client, code, rows)
+            db.mark_updated(client, code)
             logger.info("Updated %s with %d observations", code, len(rows))
         except Exception:
             failures += 1

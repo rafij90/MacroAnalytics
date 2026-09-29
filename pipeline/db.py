@@ -18,27 +18,30 @@ def get_client() -> Client:
     return create_client(url, key)
 
 
-def get_indicators(client: Client) -> list[dict]:
-    """Load indicators together with their source name."""
-    result = client.table("indicators").select("*, sources(name)").execute()
+def get_series(client: Client) -> list[dict]:
+    """Load source series with their indicator, country, and publisher metadata."""
+    result = client.table("series").select(
+        "*, indicators(*), countries(*), publishers(*)"
+    ).execute()
     return result.data or []
 
 
-def upsert_observations(client: Client, indicator_id: int, rows: list[tuple[str, float]]) -> None:
-    """Insert new observations and overwrite revised values for existing dates."""
+def upsert_actuals(client: Client, series_code: str, rows: list[tuple[str, float]]) -> None:
+    """Insert actual observations and overwrite revised values for existing periods."""
     if not rows:
         return
     data = [
-        {"indicator_id": indicator_id, "date": date, "value": value}
-        for date, value in rows
+        {"series_code": series_code, "period_date": period_date, "value": value}
+        for period_date, value in rows
     ]
-    client.table("observations").upsert(
-        data, on_conflict="indicator_id,date"
+    client.table("actuals").upsert(
+        data, on_conflict="series_code,period_date"
     ).execute()
 
 
-def mark_updated(client: Client, indicator_id: int) -> None:
-    """Record when an indicator was successfully refreshed."""
-    client.table("indicators").update(
-        {"last_updated": datetime.now(timezone.utc).isoformat()}
-    ).eq("id", indicator_id).execute()
+def mark_updated(client: Client, series_code: str) -> None:
+    """Record a UTC update time for a source series."""
+    updated_at_utc = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    client.table("series").update(
+        {"last_updated": updated_at_utc}
+    ).eq("code", series_code).execute()
