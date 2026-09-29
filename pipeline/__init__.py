@@ -1,0 +1,1 @@
+"""Data collection and database update jobs for MacroAnalytics."""
